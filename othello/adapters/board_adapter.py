@@ -47,6 +47,7 @@ class BoardAdapter:
                 self._current_player_generic_play(self._board.get_clone(), view),
                 self._current_player.color,
             )
+
             updated = True
 
         self._current_player = self._players.get_player(self._current_player.color.opposite())

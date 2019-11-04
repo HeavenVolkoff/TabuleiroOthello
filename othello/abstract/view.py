@@ -31,8 +31,12 @@ class AbstractView(metaclass=ABCMeta):
         ...
 
     def __init__(
-        self, player_paths: T.Optional[T.Sequence[str]] = None, automatic: bool = False,
+        self,
+        player_paths: T.Optional[T.Sequence[str]] = None,
+        automatic: bool = False,
+        debug: bool = False,
     ) -> None:
+        self.debug = debug
         self.automatic = automatic
         self.player_paths = player_paths or tuple()
 

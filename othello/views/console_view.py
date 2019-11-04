@@ -1,6 +1,7 @@
 # Internal
 import sys
 import typing as T
+import traceback
 
 # Project
 from ..enums import Color
@@ -19,11 +20,13 @@ class ConsoleView(AbstractView):
         for i, column in enumerate(adapter.view_data):
             print(f"│ {i + 1} │ " + " ".join(v.value for v in column) + " │")
 
-        print("└───┴─────────────────┘\n")
+        print("└───┴─────────────────┘")
 
     class Model(AbstractView.Model["ConsoleView"]):
         def show(self, view: "ConsoleView") -> T.Sequence[T.Optional[str]]:
-            print(self._title)
+            if self._title:
+                print(self._title)
+
             result: T.List[T.Optional[str]] = []
             for name, data in self._structure:
                 if name == "paragraph":
@@ -31,6 +34,8 @@ class ConsoleView(AbstractView):
                     result.append(None)
                 elif name == "input":
                     result.append(view.input(data["label"]))
+
+            print("")
 
             return result
 
@@ -80,17 +85,14 @@ class ConsoleView(AbstractView):
             print()
 
         adapter = BoardAdapter(*players)
-        self.print_view_data(adapter)
+        walkover: T.Optional[Color] = None
         while not adapter.finished:
             if not self.automatic:
                 input()
 
             color = adapter.current_color
-            if not adapter.update(self):
-                print(f"Sem movimentos para o jogador {colors[color]}")
-                continue
 
-            print(f"Jogador: {colors[color]} ({color.value})")
+            self.print_view_data(adapter)
             print(
                 (
                     "Score: "
@@ -99,15 +101,44 @@ class ConsoleView(AbstractView):
                     )
                 )
             )
-            self.print_view_data(adapter)
+            print(f"Rodada do jogador: {colors[color]} ({color.value})\n")
 
-        scores = adapter.score
-        if scores[Color.WHITE] == scores[Color.BLACK]:
-            print("Empate")
-        else:
-            print(
-                f"Jogador {colors[Color.BLACK] if scores[Color.BLACK] > scores[Color.WHITE] else colors[Color.WHITE]} Ganhou"
+            try:
+                update = adapter.update(self)
+            except Exception as exc:
+                walkover = color
+
+                if self.debug:
+                    traceback.print_exc()
+                else:
+                    self.alert(f"ERROR: {exc}")
+
+                break
+
+            if not update:
+                print(f"Sem movimentos para o jogador")
+                continue
+
+        print()
+
+        self.print_view_data(adapter)
+        print(
+            (
+                "Score: "
+                + " ".join(f"{colors[color]} = {score}" for color, score in adapter.score.items())
             )
+        )
+
+        if walkover:
+            print(f"Jogador {colors[walkover.opposite()]} Ganhou por W/O")
+        else:
+            scores = adapter.score
+            if scores[Color.WHITE] == scores[Color.BLACK]:
+                print("Empate")
+            else:
+                print(
+                    f"Jogador {colors[Color.BLACK] if scores[Color.BLACK] > scores[Color.WHITE] else colors[Color.WHITE]} Ganhou"
+                )
 
     def print(self, msg: str) -> None:
         print(msg)

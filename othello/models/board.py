@@ -1,7 +1,11 @@
 # Internal
 import typing as T
+from functools import lru_cache
 from itertools import product
-from collections import defaultdict
+from collections import Counter, defaultdict
+
+# External
+import typing_extensions as Te
 
 # Project
 from ..enums import Color
@@ -15,20 +19,21 @@ class Board:
     # Maintain compatibility with old version
     EMPTY, BLACK, WHITE, OUTER = Color  # type: ignore  # mypy issue #2305
 
+    # List of valid positions
+    POSITIONS: T.Tuple[Position, ...] = tuple(
+        Position(*pos) for pos in product(range(1, 9), repeat=2)
+    )
+
     # Basic directions
     UP, DOWN, LEFT, RIGHT = Position(-1, 0), Position(1, 0), Position(0, -1), Position(0, 1)
     UP_RIGHT, DOWN_RIGHT, DOWN_LEFT, UP_LEFT = UP + RIGHT, DOWN + RIGHT, DOWN + LEFT, UP + LEFT
     DIRECTIONS = UP, UP_RIGHT, RIGHT, DOWN_RIGHT, DOWN, DOWN_LEFT, LEFT, UP_LEFT
 
-    @staticmethod
-    def positions() -> T.Iterator[T.Tuple[int, int]]:
-        return product(range(1, 9), repeat=2)  # type: ignore # typeshed is too generic here
-
     def __init__(self, board: T.Optional[BoardState_t]) -> None:
         self._board: BoardState_t = defaultdict(lambda: Color.OUTER)
 
         if board is None:
-            for i, j in self.positions():
+            for i, j in self.POSITIONS:
                 self[i, j] = Color.EMPTY
 
             self[4, 4], self[4, 5] = Color.WHITE, Color.BLACK
@@ -59,13 +64,18 @@ class Board:
     def __setitem__(self, item: T.Tuple[int, int], value: T.Union[Color, str]) -> None:
         self._board[item] = Color(value)
 
-    def play(self, move: T.Tuple[int, int], color: T.Union[Color, str]) -> None:
-        assert Color.BLACK == color or Color.WHITE == color
+    def play(self, move: T.Tuple[int, int], color: T.Union[Color, str]) -> "Board":
+        assert color in (Color.BLACK, Color.WHITE)
+
+        if move not in self.valid_moves(color):
+            raise ValueError("Movimento inválido")
 
         self[move] = color
 
         for direction in Board.DIRECTIONS:
             self._make_flips(move, color, direction)
+
+        return self
 
     @property
     def board(self) -> "Board":
@@ -77,16 +87,18 @@ class Board:
         return self.board[l, c]
 
     def score(self) -> T.Tuple[int, int]:
-        white = sum(1 for i, j in self.positions() if self[i, j] == Color.WHITE)
-        black = sum(1 for i, j in self.positions() if self[i, j] == Color.BLACK)
-        return white, black
+        score = Counter(
+            self.board[pos] for pos in self.board.POSITIONS if self.board[pos] != Color.EMPTY
+        )
+
+        return score[Color.WHITE], score[Color.BLACK]
 
     def get_clone(self) -> "Board":
         return Board(self._board)
 
     def valid_moves(self, color: T.Union[Color, str]) -> T.Sequence[Position]:
         ret = []
-        for i, j in self.positions():
+        for i, j in self.POSITIONS:
             if self[i, j] == Color.EMPTY:
                 for direction in Board.DIRECTIONS:
                     move = Position(i, j)

@@ -31,12 +31,21 @@ arg_parser.add_argument(
     help="Passa para próxima jogada automaticamente",
     action="store_true",
 )
+arg_parser.add_argument(
+    "--debug",
+    dest="debug",
+    help="Habilita mostrar a stacktrace de errors e outros dados ",
+    action="store_true",
+)
 
-is_debug = "OTHELLO_DEBUG" in environ
+debug = True
 
 
 def main(view_type: str) -> None:
+    global debug
+
     namespace = arg_parser.parse_args()
+    debug = namespace.debug
 
     try:
         view = next(view for view in view_list[view_type] if view.available())
@@ -60,7 +69,7 @@ def main_gui() -> Te.NoReturn:
     except BaseException as exc:
         gui_error(error_msg(exc))
 
-        if is_debug:
+        if debug:
             raise
 
         sys.exit(error_msg(exc))
@@ -72,7 +81,7 @@ def main_console() -> Te.NoReturn:
     try:
         main("console")
     except BaseException as exc:
-        if is_debug:
+        if debug:
             raise
 
         sys.exit(error_msg(exc))
@@ -89,7 +98,7 @@ if __name__ == "__main__":
         if view_type == "gui":
             gui_error(error_msg(exc))
 
-        if is_debug:
+        if debug:
             raise
 
         sys.exit(error_msg(exc))

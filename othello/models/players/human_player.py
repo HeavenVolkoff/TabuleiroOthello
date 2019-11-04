@@ -17,7 +17,7 @@ class HumanPlayer:
             model = view.Model(f"Próximo movimento do Jogador ({self.color.value})")
             model.add_input("Linha")
             model.add_input("Coluna")
-            row_inp, col_inp = model.show(view)
+            col_inp, row_inp = model.show(view)
 
             move = (int(row_inp), int(col_inp))
 
