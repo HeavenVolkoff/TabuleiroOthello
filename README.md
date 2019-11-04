@@ -17,7 +17,7 @@ pip install --user .
 A aplicação pode ser acessada através do executavel `othello` após sua instalação
 
 ```
-usage: othello [-h] [--automatico] [CAMINHO [CAMINHO ...]]
+usage: othello [-h] [--automatico] [--debug] [CAMINHO [CAMINHO ...]]
 
 Simula partidas do jogo Otello
 
@@ -28,6 +28,7 @@ positional arguments:
 optional arguments:
   -h, --help    show this help message and exit
   --automatico  Passa para próxima jogada automaticamente
+  --debug       Habilita mostrar a stacktrace de errors e outros dados
 ```
 
 Exemplo de como adicionar novos jogadores:
