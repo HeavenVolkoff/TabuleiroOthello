@@ -1,23 +1,22 @@
 # Internal
 import typing as T
-from functools import lru_cache
 from itertools import product
 from collections import Counter, defaultdict
-
-# External
-import typing_extensions as Te
 
 # Project
 from ..enums import Color
 from .position import Position
 from ..misc.line_view import LineView
 
+# Type generics
 BoardState_t = T.MutableMapping[T.Tuple[int, int], Color]
 
 
 class Board:
     # Maintain compatibility with old version
     EMPTY, BLACK, WHITE, OUTER = Color  # type: ignore  # mypy issue #2305
+
+    CORNERS = (Position(1, 1), Position(1, 8), Position(8, 1), Position(8, 8))
 
     # List of valid positions
     POSITIONS: T.Tuple[Position, ...] = tuple(
@@ -29,7 +28,11 @@ class Board:
     UP_RIGHT, DOWN_RIGHT, DOWN_LEFT, UP_LEFT = UP + RIGHT, DOWN + RIGHT, DOWN + LEFT, UP + LEFT
     DIRECTIONS = UP, UP_RIGHT, RIGHT, DOWN_RIGHT, DOWN, DOWN_LEFT, LEFT, UP_LEFT
 
+    # According to: http://ceur-ws.org/Vol-1107/paper2.pdf
+    MAX_TURNS = 60
+
     def __init__(self, board: T.Optional[BoardState_t]) -> None:
+        self._turns = 0
         self._board: BoardState_t = defaultdict(lambda: Color.OUTER)
 
         if board is None:
@@ -75,6 +78,8 @@ class Board:
         for direction in Board.DIRECTIONS:
             self._make_flips(move, color, direction)
 
+        self._turns += 1
+
         return self
 
     @property
@@ -82,9 +87,9 @@ class Board:
         # Maintain compatibility with old version
         return self
 
-    def get_square_color(self, l: int, c: int) -> Color:
-        # Maintain compatibility with old version
-        return self.board[l, c]
+    @property
+    def turns(self) -> int:
+        return self._turns
 
     def score(self) -> T.Tuple[int, int]:
         score = Counter(
@@ -105,6 +110,10 @@ class Board:
                     if self._find_bracket(move, color, direction):
                         ret.append(move)
         return tuple(ret)
+
+    def get_square_color(self, l: int, c: int) -> Color:
+        # Maintain compatibility with old version
+        return self.board[l, c]
 
     def _make_flips(
         self, move: T.Tuple[int, int], color: T.Union[Color, str], direction: Position
