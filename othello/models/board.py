@@ -12,6 +12,10 @@ from ..misc.line_view import LineView
 BoardState_t = T.MutableMapping[T.Tuple[int, int], Color]
 
 
+def board_default() -> Color:
+    return Color.OUTER
+
+
 class Board:
     # Maintain compatibility with old version
     EMPTY, BLACK, WHITE, OUTER = Color  # type: ignore  # mypy issue #2305
@@ -33,7 +37,7 @@ class Board:
 
     def __init__(self, board: T.Optional[BoardState_t]) -> None:
         self._turns = 0
-        self._board: BoardState_t = defaultdict(lambda: Color.OUTER)
+        self._board: BoardState_t = defaultdict(board_default)
 
         if board is None:
             for i, j in self.POSITIONS:

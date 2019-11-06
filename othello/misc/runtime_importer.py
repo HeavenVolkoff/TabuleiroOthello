@@ -15,7 +15,7 @@ from ..models.board import Board
 def available_players(player_paths: T.Optional[T.Sequence[str]] = None) -> T.Sequence[ModuleInfo]:
     import othello
 
-    module_paths = set(player_paths) or set()
+    module_paths = set(player_paths) if player_paths else set()
     othello_path: str = othello.__path__  # type: ignore  # mypy issue #1422
     package_paths = {
         *(path.join(p, "models", "players") for p in othello_path),
@@ -27,7 +27,10 @@ def available_players(player_paths: T.Optional[T.Sequence[str]] = None) -> T.Seq
         *walk_packages(package_paths),
         *(
             ModuleInfo(
-                FileFinder(path.dirname(module_path), (SourceFileLoader, (".py",))),
+                FileFinder(
+                    path.dirname(module_path),
+                    (SourceFileLoader, (".py",)),  # type: ignore # typeshed is incorrect
+                ),
                 path.splitext(path.basename(module_path))[0],
                 False,
             )
