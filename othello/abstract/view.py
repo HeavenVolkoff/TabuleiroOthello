@@ -7,9 +7,6 @@ K = T.TypeVar("K", bound="AbstractView")
 
 
 class AbstractView(metaclass=ABCMeta):
-    automatic: bool
-    player_paths: T.Sequence[str]
-
     class Model(T.Generic[K], metaclass=ABCMeta):
         def __init__(self, title: str):
             self._title = title
@@ -51,3 +48,16 @@ class AbstractView(metaclass=ABCMeta):
     @abstractmethod
     def alert(self, msg: str) -> None:
         ...
+
+
+class AbstractTrainingView(AbstractView, metaclass=ABCMeta):
+    def __init__(self, *args, training: bool, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.training = training
+
+    @abstractmethod
+    def training_loop(self) -> None:
+        ...
+
+
+__all__ = ("AbstractView", "AbstractTrainingView")

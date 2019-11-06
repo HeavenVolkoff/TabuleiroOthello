@@ -2,15 +2,30 @@
 import sys
 import typing as T
 import traceback
+from shutil import get_terminal_size
 
 # Project
 from ..enums import Color
-from ..abstract import AbstractView, ColoredPlayerProtocol
-from ..adapters import BoardAdapter
-from ..misc.runtime_importer import import_player, available_players
+from ..abstract import AbstractTrainingView, TrainingPlayerProtocol
+from ..adapters import BoardAdapter, BoardTrainingAdapter
+from ..misc.runtime_importer import available_players
+
+if T.TYPE_CHECKING:
+    # Internal
+    from pkgutil import ModuleInfo
 
 
-class ConsoleView(AbstractView):
+LOGO = """\
+   _|_|      _|      _|                  _|  _|
+ _|    _|  _|_|_|_|  _|_|_|      _|_|    _|  _|    _|_|
+ _|    _|    _|      _|    _|  _|_|_|_|  _|  _|  _|    _|
+ _|    _|    _|      _|    _|  _|        _|  _|  _|    _|
+   _|_|        _|_|  _|    _|    _|_|_|  _|  _|    _|_|"""
+
+
+class ConsoleView(AbstractTrainingView):
+    ASK_MSG = "Selecione um dos players abaixo para ser o jogador"
+
     @staticmethod
     def print_view_data(adapter: BoardAdapter) -> None:
         print("┌─────────────────────┐")
@@ -22,7 +37,7 @@ class ConsoleView(AbstractView):
 
         print("└───┴─────────────────┘")
 
-    class Model(AbstractView.Model["ConsoleView"]):
+    class Model(AbstractTrainingView.Model["ConsoleView"]):
         def show(self, view: "ConsoleView") -> T.Sequence[T.Optional[str]]:
             if self._title:
                 print(self._title)
@@ -44,49 +59,16 @@ class ConsoleView(AbstractView):
         return True
 
     def loop(self) -> None:
-        print(
-            """\
-   _|_|      _|      _|                  _|  _|
- _|    _|  _|_|_|_|  _|_|_|      _|_|    _|  _|    _|_|
- _|    _|    _|      _|    _|  _|_|_|_|  _|  _|  _|    _|
- _|    _|    _|      _|    _|  _|        _|  _|  _|    _|
-   _|_|        _|_|  _|    _|    _|_|_|  _|  _|    _|_|"""
+        print(LOGO)
+
+        all_players = available_players(self.player_paths)
+        adapter = BoardAdapter(
+            self.ask_for_player(f"{self.ASK_MSG} {repr(Color.BLACK)}", all_players),
+            self.ask_for_player(f"{self.ASK_MSG} {repr(Color.WHITE)}", all_players),
         )
 
-        colors = {Color.BLACK: "preto", Color.WHITE: "branco"}
-        players: T.List["ColoredPlayerProtocol"] = []
-        all_players = available_players(self.player_paths)
-        for i, (color, name) in enumerate(colors.items()):
-            while True:
-                print(f"Selecione um dos players abaixo para ser o jogador {name}")
-
-                for idx, player_info in enumerate(all_players):
-                    print(f"{idx} - {player_info.name}")
-
-                try:
-                    chosen_pos = int(self.input("Digite o numero do player que voce deseja"))
-                except ValueError:
-                    self.alert("Escolha deve ser um inteiro")
-                    continue
-
-                if 0 <= chosen_pos < len(all_players):
-                    break
-
-                self.alert("Escolha inválida")
-
-            player_cls: T.Type["ColoredPlayerProtocol"] = import_player(  # type: ignore
-                all_players[chosen_pos]
-            )
-
-            player = player_cls(color)
-            assert hasattr(player, "color")
-
-            players.append(player)
-            print()
-
-        adapter = BoardAdapter(*players)
-        walkover: T.Optional[Color] = None
-        while not adapter.finished:
+        finished = False
+        while not finished:
             if not self.automatic:
                 input()
 
@@ -97,17 +79,16 @@ class ConsoleView(AbstractView):
                 (
                     "Score: "
                     + " ".join(
-                        f"{colors[color]} = {score}" for color, score in adapter.score.items()
+                        f"{repr(color)} = {score}" for color, score in adapter.score.items()
                     )
                 )
             )
-            print(f"Rodada do jogador: {colors[color]} ({color.value})\n")
+            print(f"Rodada do jogador: {repr(color)} ({color.value})\n")
 
             try:
                 update = adapter.update(self)
+                finished = adapter.finished()
             except Exception as exc:
-                walkover = color
-
                 if self.debug:
                     traceback.print_exc()
                 else:
@@ -117,7 +98,6 @@ class ConsoleView(AbstractView):
 
             if not update:
                 print(f"Sem movimentos para o jogador")
-                continue
 
         print()
 
@@ -125,20 +105,77 @@ class ConsoleView(AbstractView):
         print(
             (
                 "Score: "
-                + " ".join(f"{colors[color]} = {score}" for color, score in adapter.score.items())
+                + " ".join(f"{repr(color)} = {score}" for color, score in adapter.score.items())
             )
         )
 
-        if walkover:
-            print(f"Jogador {colors[walkover.opposite()]} Ganhou por W/O")
+        if adapter.failure:
+            assert adapter.winner
+            print(f"Jogador {repr(adapter.winner)} Ganhou por W/O")
         else:
-            scores = adapter.score
-            if scores[Color.WHITE] == scores[Color.BLACK]:
-                print("Empate")
+            if adapter.winner:
+                print(f"Jogador {repr(adapter.winner)} Ganhou")
             else:
-                print(
-                    f"Jogador {colors[Color.BLACK] if scores[Color.BLACK] > scores[Color.WHITE] else colors[Color.WHITE]} Ganhou"
-                )
+                print("Empate")
+
+    def training_loop(self) -> None:
+        print(LOGO)
+        print(" # Training Mode # ")
+
+        all_players = available_players(self.player_paths)
+        keep_running = True
+        training_player: T.Union["ModuleInfo", "TrainingPlayerProtocol"] = self.ask_for_player(
+            f"Selecione o jogador ({repr(Color.BLACK)}) para treino", all_players
+        )
+        competing_player = self.ask_for_player(f"{self.ASK_MSG} {repr(Color.WHITE)}", all_players)
+        counter = {"game": 0, "round": 0}
+
+        while keep_running:
+            adapter = BoardTrainingAdapter(training_player, competing_player)
+            counter["game"] += 1
+            # Cache training player for consecutive games
+            training_player = adapter.training_player
+
+            while not adapter.finished:
+                counter["round"] += 1
+
+                self.update_line(f"Partida {counter['game']}, Rodada {counter['round']}")
+
+                try:
+                    update = adapter.update(self)
+                except Exception as exc:
+                    if self.debug:
+                        traceback.print_exc()
+                    else:
+                        self.alert(f"ERROR: {exc}")
+
+                    if not self.automatic:
+                        answer = self.input("Continuar treino? (Y/n)") or "Y"
+                        if answer not in ("y", "Y"):
+                            keep_running = False
+
+                    break
+
+                if not update:
+                    continue
+
+    def ask_for_player(self, title: str, players: T.Sequence["ModuleInfo"]) -> "ModuleInfo":
+        while True:
+            print(title)
+
+            for idx, player_info in enumerate(players):
+                print(f"{idx} - {player_info.name}")
+
+            try:
+                chosen_pos = int(self.input("Digite o numero do player que voce deseja"))
+            except ValueError:
+                self.alert("Escolha deve ser um inteiro")
+                continue
+
+            if 0 <= chosen_pos < len(players):
+                return players[chosen_pos]
+
+            self.alert("Escolha inválida")
 
     def print(self, msg: str) -> None:
         print(msg)
@@ -148,6 +185,10 @@ class ConsoleView(AbstractView):
 
     def input(self, msg: str) -> str:
         return input(f"{msg}: ")
+
+    def update_line(self, msg: str) -> None:
+        terminal_size = get_terminal_size((80, 20))
+        print("\r" + msg.ljust(terminal_size.columns), end="")
 
 
 __all__ = ("ConsoleView",)

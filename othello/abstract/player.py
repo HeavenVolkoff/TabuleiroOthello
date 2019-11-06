@@ -12,11 +12,14 @@ if T.TYPE_CHECKING:
 
 @Te.runtime
 class PlayerProtocol(Te.Protocol):
+    def __init__(self, __color: "Color"):
+        ...
+
     def play(self, __board: "Board", **__kwargs: T.Any) -> T.Tuple[int, int]:
         ...
 
 
-class ColoredPlayerProtocol(PlayerProtocol):
+class ColoredPlayerProtocol(PlayerProtocol, Te.Protocol):
     color: "Color"
 
     def __init__(self, __color: "Color"):

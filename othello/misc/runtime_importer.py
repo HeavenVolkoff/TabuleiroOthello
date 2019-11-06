@@ -8,8 +8,10 @@ from importlib.util import module_from_spec
 from importlib.machinery import FileFinder, SourceFileLoader
 
 # Project
-from ..abstract import PlayerProtocol
 from ..models.board import Board
+
+# Type generic
+K = T.TypeVar("K", bound=type)
 
 
 def available_players(player_paths: T.Optional[T.Sequence[str]] = None) -> T.Sequence[ModuleInfo]:
@@ -44,17 +46,17 @@ def available_players(player_paths: T.Optional[T.Sequence[str]] = None) -> T.Seq
     )
 
 
-def import_player(player_importer: ModuleInfo) -> T.Type[PlayerProtocol]:
+def import_player(player_importer: ModuleInfo, protocol: K) -> K:
     loader, module_name, is_package = player_importer
 
     if is_package:
-        sys.path.append(path.join(loader.path))
+        sys.path.append(loader.path)
 
     module_spec = loader.find_spec(module_name)
     if module_spec is None:
         raise ImportError(
-            f"Failed to import player class from {'package' if is_package else 'module'}: "
-            f"{module_name}"
+            f"Falha ao importar {'pacote' if is_package else 'modulo'} em "
+            f"{path.join(loader.path, module_name)}"
         )
 
     module = module_from_spec(module_spec)
@@ -68,13 +70,16 @@ def import_player(player_importer: ModuleInfo) -> T.Type[PlayerProtocol]:
     objects = tuple(getattr(module, symbol) for symbol in symbols)
 
     try:
-        player_cls: T.Type[PlayerProtocol] = next(
+        player_cls: K = next(
             cls
             for cls in objects
-            if isclass(cls) and issubclass(cls, PlayerProtocol) and cls is not Board
+            if isclass(cls) and issubclass(cls, protocol) and cls is not Board
         )
     except StopIteration:
-        raise ImportError(f"Failed to import player class from module: {module_name}") from None
+        raise ImportError(
+            f"Nenhuma classe que implemente {protocol.__qualname__} foi "
+            f"encontrada em {path.join(loader.path, module_name)}"
+        ) from None
 
     return player_cls
 

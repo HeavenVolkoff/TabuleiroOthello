@@ -5,7 +5,12 @@ from inspect import signature
 # Project
 from ..enums import Color
 from ..models import Board
-from ..abstract import AbstractView, ColoredPlayerProtocol
+from ..abstract import AbstractView, PlayerProtocol, ColoredPlayerProtocol
+from ..misc.runtime_importer import import_player
+
+if T.TYPE_CHECKING:
+    # Internal
+    from pkgutil import ModuleInfo
 
 
 class Players(T.NamedTuple):
@@ -17,10 +22,32 @@ class Players(T.NamedTuple):
 
 
 class BoardAdapter:
-    def __init__(self, black: ColoredPlayerProtocol, white: ColoredPlayerProtocol) -> None:
+    def __init__(
+        self,
+        black: T.Union["ModuleInfo", PlayerProtocol],
+        white: T.Union["ModuleInfo", PlayerProtocol],
+    ) -> None:
+        black_player = (
+            black
+            if isinstance(black, PlayerProtocol)
+            else import_player(black, PlayerProtocol)(Color.BLACK)
+        )
+        white_player = (
+            white
+            if isinstance(white, PlayerProtocol)
+            else import_player(white, PlayerProtocol)(Color.WHITE)
+        )
+
+        # Validate players
+        assert hasattr(black_player, "color") and hasattr(white_player, "color")
+
         # Internal
         self._board = Board(None)
-        self._players = Players(black, white)
+        self._failure: T.Optional[Color] = None
+        self._players = Players(
+            T.cast(ColoredPlayerProtocol, black_player),
+            T.cast(ColoredPlayerProtocol, white_player),
+        )
         self._current_player = self._players.black
 
     @property
@@ -28,12 +55,29 @@ class BoardAdapter:
         return dict(zip((Color.WHITE, Color.BLACK), self._board.score()))
 
     @property
+    def winner(self) -> T.Optional[Color]:
+        return (
+            self._failure.opposite()
+            if self._failure
+            else (
+                max(self.score, key=self.score.get)
+                if self.score[Color.WHITE] != self.score[Color.BLACK]
+                else None
+            )
+        )
+
+    @property
+    def failure(self) -> bool:
+        return self._failure is not None
+
+    @property
     def view_data(self) -> T.Sequence[T.Sequence[Color]]:
         return tuple(column[1:9] for column in self._board)[1:9]
 
-    @property
     def finished(self) -> bool:
-        return not (self._has_moves(Color.WHITE) or self._has_moves(Color.BLACK))
+        return self._failure is not None or not (
+            self._has_moves(Color.WHITE) or self._has_moves(Color.BLACK)
+        )
 
     @property
     def current_color(self) -> Color:
@@ -43,10 +87,14 @@ class BoardAdapter:
         updated = False
 
         if self._has_moves(self._current_player.color):
-            self._board.play(
-                self._current_player_generic_play(self._board.get_clone(), view),
-                self._current_player.color,
-            )
+            try:
+                self._board.play(
+                    self._current_player_generic_play(self._board.get_clone(), view),
+                    self._current_player.color,
+                )
+            except Exception:
+                self._failure = self._current_player.color
+                raise
 
             updated = True
 

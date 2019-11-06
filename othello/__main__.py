@@ -1,6 +1,7 @@
 # Internal
 import sys
 import typing as T
+import traceback
 from os import environ
 from argparse import ArgumentParser
 
@@ -9,7 +10,7 @@ import typing_extensions as Te
 
 # External
 from othello.views import ConsoleView
-from othello.abstract import AbstractView
+from othello.abstract import AbstractView, AbstractTrainingView
 from othello.misc.error_dialog import gui_error
 
 view_list: T.Dict[str, T.Sequence[T.Type[AbstractView]]] = {
@@ -32,9 +33,15 @@ arg_parser.add_argument(
     action="store_true",
 )
 arg_parser.add_argument(
-    "--debug",
+    "--depurar",
     dest="debug",
-    help="Habilita mostrar a stacktrace de errors e outros dados ",
+    help="Habilita mostrar a stacktrace de errors e outros dados",
+    action="store_true",
+)
+arg_parser.add_argument(
+    "--treinamento",
+    dest="training",
+    help="Habilita modo de treinamento de um jogador",
     action="store_true",
 )
 
@@ -47,16 +54,32 @@ def main(view_type: str) -> None:
     namespace = arg_parser.parse_args()
     debug = namespace.debug
 
-    try:
-        view = next(view for view in view_list[view_type] if view.available())
-    except StopIteration:
-        raise RuntimeError("Unavailable view")
+    view = None
+    training = namespace.training
+    views_iter = iter(view for view in view_list[view_type] if view.available())
+    while view is None:
+        try:
+            view_cls = next(views_iter)
 
-    try:
-        view(**vars(namespace)).loop()
-    except KeyboardInterrupt:
-        print()
-        pass
+            if training and not issubclass(view_cls, AbstractTrainingView):
+                raise RuntimeError("Visualização não suporta mode de treino")
+
+            view = view_cls(**vars(namespace))
+        except StopIteration:
+            break
+        except Exception:
+            if debug:
+                traceback.print_exc()
+
+            view = None
+    else:
+        try:
+            return view.training_loop() if training else view.loop()
+        except KeyboardInterrupt:
+            print()
+            pass
+
+    raise RuntimeError("Unavailable view")
 
 
 def error_msg(exc: BaseException) -> str:
